@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Design System Hub & Exporter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .section-title { font-size: 2.2rem; font-weight: 900; border-bottom: 8px solid #000; padding-bottom: 10px; margin-bottom: 40px; text-transform: uppercase; }
+        .spec-card { background: white; border-radius: 2.5rem; border: 1px solid #f1f5f9; padding: 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+        .preview-box { width: 100%; min-height: 140px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #f1f5f9; margin-bottom: 1.5rem; padding: 1rem; }
+        .typo-table { width: 100%; border-collapse: separate; border-spacing: 40px 0; margin-left: -40px; }
+        .typo-table td { padding: 20px 0; vertical-align: top; border-bottom: 1px solid #f8fafc; }
+        .data-table { width: 100%; font-family: ui-monospace, monospace; font-size: 11px; color: #64748b; }
+        .data-row { display: flex; justify-content: space-between; border-bottom: 1px solid #f8fafc; padding: 3px 0; }
+        .data-val { font-weight: bold; color: #1e293b; }
+        .color-blue { color: #3b82f6; font-weight: 800; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-8 lg:p-16 text-slate-900">
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-16">
+            <h1 class="text-5xl font-black mb-6 tracking-tighter uppercase">Design Exporter</h1>
+            <div class="bg-white inline-flex p-2 rounded-full shadow-2xl border-2 max-w-2xl w-full mb-8">
+                <input type="text" id="urlInput" placeholder="https://example.com" class="flex-1 px-6 outline-none text-lg">
+                <button onclick="startAnalysis()" id="startBtn" class="bg-emerald-600 text-white px-10 py-3 rounded-full font-bold hover:bg-emerald-700">ANALYZE</button>
+            </div>
+            <div id="exportBtns" class="hidden flex justify-center gap-4">
+                <button onclick="downloadJSON()" class="bg-black text-white px-6 py-2 rounded-xl font-bold text-xs uppercase">JSON Export</button>
+                <button onclick="downloadMD()" class="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold text-xs uppercase">Design.md Export</button>
+            </div>
+        </header>
+
+        <div id="loading" class="hidden py-40 text-center font-bold text-emerald-600 animate-pulse text-xl">실시간 스타일 및 iframe 분석 중...</div>
+
+        <div id="result" class="hidden space-y-32">
+            <section id="colorSection">
+                <h2 class="section-title">1. Color Palette</h2>
+                <div id="colorContainer" class="space-y-16"></div>
+            </section>
+
+            <section id="typoSection">
+                <h2 class="section-title">2. Typography Matrix</h2>
+                <div class="bg-white p-12 rounded-[3rem] shadow-sm border overflow-x-auto">
+                    <div id="typoContainer"></div>
+                </div>
+            </section>
+
+            <section id="buttonSection">
+                <h2 class="section-title">3. Button System Library</h2>
+                <div id="buttonLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+            </section>
+
+            <section id="entrySection">
+                <h2 class="section-title">4. Data Entry Library</h2>
+                <div id="entryLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        let finalData = null;
+        const rgbToHex = (rgb) => {
+            if(!rgb || !rgb.includes('rgb')) return "#FFFFFF";
+            const m = rgb.match(/\d+/g);
+            return "#" + m.slice(0, 3).map(x => parseInt(x).toString(16).padStart(2, '0')).join('').toUpperCase();
+        };
+
+        async function startAnalysis() {
+            const url = document.getElementById('urlInput').value;
+            if(!url) return alert('URL 입력!');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('result').classList.add('hidden');
+            try {
+                const res = await fetch('http://localhost:3000/analyze', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const json = await res.json();
+                if(json.success) {
+                    finalData = json.data;
+                    render();
+                    document.getElementById('result').classList.remove('hidden');
+                    document.getElementById('exportBtns').classList.remove('hidden');
+                }
+            } catch (e) { alert('분석 실패'); }
+            finally { document.getElementById('loading').classList.add('hidden'); }
+        }
+
+        function render() {
+            // [1] Color Palette (기존 사양 유지)
+            const groups = ['brand', 'functional', 'supporting'];
+            document.getElementById('colorContainer').innerHTML = groups.map(g => `
+                <div><h3 class="text-xs font-black text-slate-400 mb-6 uppercase tracking-widest">${g} Spectrum</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                    ${(finalData.colorSystem[g] || []).map(c => `
+                        <div class="bg-white rounded-3xl shadow-xl border overflow-hidden">
+                            <div class="h-28 w-full" style="background-color: ${c.hex}"></div>
+                            <div class="p-6 font-mono text-[11px]">
+                                <p class="font-black text-xl mb-2 text-slate-900">${c.hex}</p>
+                                <div class="data-row"><span>RGB</span><span class="data-val">${c.rgb}</span></div>
+                                <div class="data-row"><span>CMYK</span><span class="data-val">${c.cmyk}</span></div>
+                            </div>
+                        </div>`).join('')}
+                </div></div>`).join('');
+
+            // [2] Typo Matrix (Gutter 및 Letter-Spacing 포함)
+            const tags = ['H1','H2','H3','H4','H5','Body','Small'];
+            const resKeys = Object.keys(finalData.typo);
+            let typoHtml = `<table class="typo-table"><thead><tr><th class="text-left text-slate-300 text-[10px] uppercase border-b pb-4">Tag</th>${resKeys.map(r=>`<th class="text-left text-slate-300 text-[10px] uppercase border-b pb-4">${r}</th>`).join('')}</tr></thead><tbody>`;
+            tags.forEach(t => {
+                typoHtml += `<tr><td class="font-black text-xl pr-10">${t}</td>${resKeys.map(r => {
+                    const d = finalData.typo[r][t] || {};
+                    return `<td><div class="space-y-1">
+                        <p class="font-bold text-lg text-slate-900" style="font-family: ${d.family}">${d.size}</p>
+                        <div class="data-table">
+                            <div class="data-row"><span>WEIGHT</span><span class="data-val">${d.weight}</span></div>
+                            <div class="data-row"><span>LH</span><span class="data-val">${d.lh}</span></div>
+                            <div class="data-row"><span>LS</span><span class="data-val">${d.ls}</span></div>
+                            <div class="data-row"><span>HEX</span><span class="color-blue">${rgbToHex(d.color)}</span></div>
+                        </div>
+                    </div></td>`;
+                }).join('')}</tr>`;
+            });
+            document.getElementById('typoContainer').innerHTML = typoHtml + `</tbody></table>`;
+
+            // [3] Button System (실제 정의된 기능만 배지 표시)
+            document.getElementById('buttonLibrary').innerHTML = finalData.buttonLibrary.map(btn => {
+                const f = btn.functions;
+                return `
+                <div class="spec-card">
+                    <div class="preview-box"><button style="${styleToCss(btn.css)}; position:static;">${btn.text}</button></div>
+                    <div class="data-table">
+                        <div class="data-row"><span>BG</span><span class="color-blue">${rgbToHex(btn.css.backgroundColor)}</span></div>
+                        <div class="data-row"><span>FONT</span><span class="data-val" style="font-size:9px">${btn.css.fontFamily.split(',')[0]}</span></div>
+                        <div class="data-row"><span>PADDING</span><span class="data-val">${btn.metrics.padding}</span></div>
+                        <div class="mt-4 flex gap-2">
+                            ${f.hasHover ? '<span class="px-2 py-0.5 bg-blue-100 text-blue-600 text-[9px] font-bold rounded uppercase">Hover</span>' : ''}
+                            ${f.hasFocus ? '<span class="px-2 py-0.5 bg-purple-100 text-purple-600 text-[9px] font-bold rounded uppercase">Focus</span>' : ''}
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            // [4] Data Entry (iframe 및 모든 타입 자동 분류 렌더링)
+            document.getElementById('entryLibrary').innerHTML = finalData.entryLibrary.map(item => {
+                let preview = '';
+                if (['checkbox', 'radio'].includes(item.type)) {
+                    preview = `<div class="flex items-center gap-2"><input type="${item.type}" style="width:20px;height:20px" checked><span style="font-family:${item.css.fontFamily}">${item.type.toUpperCase()}</span></div>`;
+                } else if (item.tag === 'select') {
+                    preview = `<select style="${styleToCss(item.css)}; width:100%"><option>${item.text || 'Select'}</option></select>`;
+                } else {
+                    preview = `<input value="${item.text}" style="${styleToCss(item.css)}; width:100%">`;
+                }
+
+                return `
+                <div class="spec-card">
+                    <div class="preview-box">${preview}</div>
+                    <div class="data-table">
+                        <div class="data-row"><span>TYPE</span><span class="data-val uppercase">${item.type}</span></div>
+                        <div class="data-row"><span>RADIUS</span><span class="data-val">${item.css.borderRadius}</span></div>
+                        <div class="data-row"><span>FONT</span><span class="data-val" style="font-size:9px">${item.css.fontFamily.split(',')[0]}</span></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function styleToCss(obj) {
+            return Object.entries(obj).map(([k,v]) => `${k.replace(/[A-Z]/g, m => "-" + m.toLowerCase())}:${v}`).join(';');
+        }
+
+        function downloadJSON() {
+            const blob = new Blob([JSON.stringify(finalData, null, 2)], {type:'application/json'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-system.json'; a.click();
+        }
+
+        function downloadMD() {
+            let md = "# Design System Specification\n\n## 1. Color System\n";
+            finalData.colorSystem.brand.forEach(c => md += `- Brand: ${c.hex} (${c.rgb})\n`);
+            md += "\n## 2. Typography Matrix\n(Details in JSON)\n";
+            const blob = new Blob([md], {type:'text/markdown'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-guide.md'; a.click();
+        }
+    </script>
+</body>
+</html>
