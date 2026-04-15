@@ -102,7 +102,7 @@ async function extractDesignTokens(baseUrl) {
     // [Render 배포용 설정] 환경 변수에 설정된 경로를 우선 사용
     const browser = await puppeteer.launch({ 
         headless: "new", 
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+        // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
