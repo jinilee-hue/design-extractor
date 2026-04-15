@@ -99,10 +99,9 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
-    // [Render 배포용 설정] 환경 변수에 설정된 경로를 우선 사용
+    // [중요] Render 환경 최적화: executablePath를 설정하지 않아야 npx로 설치된 브라우저를 자동 탐색합니다.
     const browser = await puppeteer.launch({ 
         headless: "new", 
-        // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
