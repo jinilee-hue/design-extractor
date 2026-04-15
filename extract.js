@@ -100,10 +100,10 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
-    // [중요] Render 배포용 설정
-    // executablePath를 적지 않아야 환경 변수(PUPPETEER_CACHE_DIR)를 읽어 크롬을 찾습니다.
+    // 환경 변수에 설정한 경로(PUPPETEER_EXECUTABLE_PATH)를 우선적으로 사용합니다.
     const browser = await puppeteer.launch({ 
         headless: "new", 
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, 
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
