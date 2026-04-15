@@ -1,193 +1,182 @@
-const puppeteer = require('puppeteer-core');
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Design System Hub & Exporter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .section-title { font-size: 2.2rem; font-weight: 900; border-bottom: 8px solid #000; padding-bottom: 10px; margin-bottom: 40px; text-transform: uppercase; }
+        .spec-card { background: white; border-radius: 2.5rem; border: 1px solid #f1f5f9; padding: 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+        .preview-box { width: 100%; min-height: 140px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #f1f5f9; margin-bottom: 1.5rem; padding: 1rem; }
+        .typo-table { width: 100%; border-collapse: separate; border-spacing: 40px 0; margin-left: -40px; }
+        .typo-table td { padding: 20px 0; vertical-align: top; border-bottom: 1px solid #f8fafc; }
+        .data-table { width: 100%; font-family: ui-monospace, monospace; font-size: 11px; color: #64748b; }
+        .data-row { display: flex; justify-content: space-between; border-bottom: 1px solid #f8fafc; padding: 3px 0; }
+        .data-val { font-weight: bold; color: #1e293b; }
+        .color-blue { color: #3b82f6; font-weight: 800; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-8 lg:p-16 text-slate-900">
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-16">
+            <h1 class="text-5xl font-black mb-6 tracking-tighter uppercase">Design Exporter</h1>
+            <div class="bg-white inline-flex p-2 rounded-full shadow-2xl border-2 max-w-2xl w-full mb-8">
+                <input type="text" id="urlInput" placeholder="https://example.com" class="flex-1 px-6 outline-none text-lg">
+                <button onclick="startAnalysis()" id="startBtn" class="bg-emerald-600 text-white px-10 py-3 rounded-full font-bold hover:bg-emerald-700">ANALYZE</button>
+            </div>
+            <div id="exportBtns" class="hidden flex justify-center gap-4">
+                <button onclick="downloadJSON()" class="bg-black text-white px-6 py-2 rounded-xl font-bold text-xs uppercase">JSON Export</button>
+                <button onclick="downloadMD()" class="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold text-xs uppercase">Design.md Export</button>
+            </div>
+        </header>
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        <div id="loading" class="hidden py-40 text-center font-bold text-emerald-600 animate-pulse text-xl">실시간 스타일 및 iframe 분석 중...</div>
 
-// 추출 셀렉터 정의
-const BUTTON_SELECTOR = 'button, a[href], a[role="button"], [class*="btn"], [class*="button"]';
-const ENTRY_SELECTOR = 'input, textarea, select, [role="checkbox"], [role="radio"], .toggle, .switch, .checkbox, .radio';
+        <div id="result" class="hidden space-y-32">
+            <section id="colorSection"><h2 class="section-title">1. Color Palette</h2><div id="colorContainer" class="space-y-16"></div></section>
+            <section id="typoSection">
+                <h2 class="section-title">2. Typography Matrix</h2>
+                <div class="bg-white p-12 rounded-[3rem] shadow-sm border overflow-x-auto"><div id="typoContainer"></div></div>
+            </section>
+            <section id="buttonSection"><h2 class="section-title">3. Button System Library</h2><div id="buttonLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div></section>
+            <section id="entrySection"><h2 class="section-title">4. Data Entry Library</h2><div id="entryLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div></section>
+        </div>
+    </div>
 
-async function analyzePage(page, url) {
-    try {
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-        await delay(2000);
-
-        const allEntries = [];
-        const frames = page.frames();
-
-        for (const frame of frames) {
-            try {
-                const data = await frame.evaluate((btnSel, entrySel) => {
-                    const getStyle = (el) => window.getComputedStyle(el);
-                    
-                    const getActualFunctions = (el) => {
-                        const funcs = { hasHover: false, hasFocus: false, hasChecked: false, hasDisabled: false };
-                        try {
-                            for (const sheet of document.styleSheets) {
-                                try {
-                                    const rules = sheet.cssRules || sheet.rules;
-                                    for (const rule of rules) {
-                                        if (rule.selectorText && (rule.selectorText.includes(el.className.split(' ')[0]) || rule.selectorText.includes(el.tagName.toLowerCase()))) {
-                                            if (rule.selectorText.includes(':hover')) funcs.hasHover = true;
-                                            if (rule.selectorText.includes(':focus')) funcs.hasFocus = true;
-                                            if (rule.selectorText.includes(':checked')) funcs.hasChecked = true;
-                                            if (rule.selectorText.includes(':disabled')) funcs.hasDisabled = true;
-                                        }
-                                    }
-                                } catch(e) {}
-                            }
-                        } catch(e) {}
-                        return funcs;
-                    };
-
-                    const collect = (selector) => {
-                        return Array.from(document.querySelectorAll(selector))
-                            .filter(el => el.offsetWidth > 5 && el.offsetHeight > 5)
-                            .map(el => {
-                                const s = getStyle(el);
-                                const rect = el.getBoundingClientRect();
-                                
-                                let actualBg = s.backgroundColor;
-                                let parent = el.parentElement;
-                                while ((actualBg === 'rgba(0, 0, 0, 0)' || actualBg === 'transparent') && parent) {
-                                    actualBg = window.getComputedStyle(parent).backgroundColor;
-                                    parent = parent.parentElement;
-                                }
-
-                                return {
-                                    type: el.type || el.tagName.toLowerCase(),
-                                    tag: el.tagName.toLowerCase(),
-                                    text: el.innerText.trim() || el.placeholder || el.value || 'Label',
-                                    css: {
-                                        backgroundColor: actualBg,
-                                        color: s.color,
-                                        borderTopColor: s.borderTopColor,
-                                        borderTopWidth: s.borderTopWidth,
-                                        borderTopStyle: s.borderTopStyle,
-                                        borderRadius: s.borderRadius,
-                                        fontSize: s.fontSize,
-                                        fontWeight: s.fontWeight,
-                                        fontFamily: s.fontFamily,
-                                        paddingTop: s.paddingTop,
-                                        paddingRight: s.paddingRight,
-                                        paddingBottom: s.paddingBottom,
-                                        paddingLeft: s.paddingLeft,
-                                        letterSpacing: s.letterSpacing
-                                    },
-                                    metrics: {
-                                        width: Math.round(rect.width) + 'px',
-                                        height: Math.round(rect.height) + 'px',
-                                        padding: `${parseInt(s.paddingTop)}px ${parseInt(s.paddingRight)}px ${parseInt(s.paddingBottom)}px ${parseInt(s.paddingLeft)}px`
-                                    },
-                                    functions: getActualFunctions(el)
-                                };
-                            });
-                    };
-
-                    return {
-                        buttons: collect(btnSel),
-                        entries: collect(entrySel)
-                    };
-                }, BUTTON_SELECTOR, ENTRY_SELECTOR);
-                
-                allEntries.push(...data.entries);
-                if (frame === page.mainFrame()) allEntries.mainButtons = data.buttons;
-            } catch (e) {}
-        }
-
-        return allEntries;
-    } catch (e) { return []; }
-}
-
-async function extractDesignTokens(baseUrl) {
-    // [중요] Render 로그에서 확인된 실제 크롬 설치 경로를 직접 지정
-    // puppeteer-core는 브라우저 자동 탐색 기능이 없으므로 이 경로가 필수입니다.
-    const browser = await puppeteer.launch({ 
-        headless: "new", 
-        executablePath: '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome',
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-        ] 
-    });
-
-    const page = await browser.newPage();
-    try {
-        await page.goto(baseUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-        
-        // 1. 컬러 추출
-        const colorData = await page.evaluate(() => {
-            const res = {};
-            document.querySelectorAll('*').forEach(el => {
-                const s = window.getComputedStyle(el);
-                if (s.backgroundColor.startsWith('rgb') && s.backgroundColor !== 'rgba(0, 0, 0, 0)') {
-                    res[s.backgroundColor] = (res[s.backgroundColor] || 0) + 1;
-                }
-            });
-            return res;
-        });
-
-        // 2. 타이포그래피 추출 (반응형 대응)
-        const typo = {};
-        const viewports = [{n:'1920*1080', w:1920}, {n:'768*1024', w:768}, {n:'360*760', w:360}];
-        for(const vp of viewports) {
-            await page.setViewport({width: vp.w, height: 1000});
-            await page.goto(baseUrl, {waitUntil: 'networkidle2'});
-            await delay(1000);
-            typo[vp.n] = await page.evaluate(() => {
-                const tags = {'H1':'h1','H2':'h2','H3':'h3','H4':'h4','H5':'h5','Body':'p','Small':'small'};
-                const res = {};
-                Object.entries(tags).forEach(([label, tag]) => {
-                    const el = document.querySelector(tag) || document.createElement(tag);
-                    const s = window.getComputedStyle(el);
-                    res[label] = { family: s.fontFamily, size: s.fontSize, lh: s.lineHeight, ls: s.letterSpacing, color: s.color, weight: s.fontWeight };
-                });
-                return res;
-            });
-        }
-
-        // 3. 버튼 및 입력창 구성요소 추출
-        const entryData = await analyzePage(page, baseUrl);
-
-        await browser.close();
-
-        // 헬퍼 함수: 컬러 변환
+    <script>
+        let finalData = null;
         const rgbToHex = (rgb) => {
+            if(!rgb || !rgb.includes('rgb')) return "#FFFFFF";
             const m = rgb.match(/\d+/g);
-            return m ? "#" + m.slice(0, 3).map(x => parseInt(x).toString(16).padStart(2, '0')).join('').toUpperCase() : "#FFFFFF";
-        };
-        const rgbToCmyk = (rgb) => {
-            const m = rgb.match(/\d+/g).map(Number);
-            let r=m[0]/255, g=m[1]/255, b=m[2]/255, k=1-Math.max(r,g,b);
-            if(k===1) return "C0 M0 Y0 K100";
-            return `C${Math.round((1-r-k)/(1-k)*100)} M${Math.round((1-g-k)/(1-k)*100)} Y${Math.round((1-b-k)/(1-k)*100)} K${Math.round(k*100)}`;
+            return "#" + m.slice(0, 3).map(x => parseInt(x).toString(16).padStart(2, '0')).join('').toUpperCase();
         };
 
-        const sortedColors = Object.entries(colorData).sort((a,b)=>b[1]-a[1]).map(c => ({
-            hex: rgbToHex(c[0]), rgb: c[0], cmyk: rgbToCmyk(c[0])
-        }));
+        async function startAnalysis() {
+            const url = document.getElementById('urlInput').value;
+            if(!url) return alert('URL 입력!');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('result').classList.add('hidden');
+            
+            try {
+                // [중요] Render 서버 주소로 수정됨
+                const res = await fetch('https://design-extractor-icoc.onrender.com/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                
+                const json = await res.json();
+                if(json.success) {
+                    finalData = json.data;
+                    render();
+                    document.getElementById('result').classList.remove('hidden');
+                    document.getElementById('exportBtns').classList.remove('hidden');
+                } else {
+                    alert('분석 실패: ' + (json.error || '알 수 없는 오류'));
+                }
+            } catch (e) { 
+                console.error(e);
+                alert('서버 연결 실패. 서버가 깨어나는 중일 수 있으니 잠시 후 다시 시도해주세요.'); 
+            } finally { 
+                document.getElementById('loading').classList.add('hidden'); 
+            }
+        }
 
-        const uniqueFilter = (arr) => {
-            const seen = new Set();
-            return arr.filter(item => {
-                const sig = `${item.type}-${item.css.backgroundColor}-${item.css.color}-${item.css.fontSize}-${item.css.fontFamily}`;
-                if (seen.has(sig)) return false;
-                seen.add(sig);
-                return true;
+        function render() {
+            // 1. Color Palette
+            const groups = ['brand', 'functional', 'supporting'];
+            document.getElementById('colorContainer').innerHTML = groups.map(g => `
+                <div><h3 class="text-xs font-black text-slate-400 mb-6 uppercase tracking-widest">${g} Spectrum</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                    ${(finalData.colorSystem[g] || []).map(c => `
+                        <div class="bg-white rounded-3xl shadow-xl border overflow-hidden">
+                            <div class="h-28 w-full" style="background-color: ${c.hex}"></div>
+                            <div class="p-6 font-mono text-[11px]">
+                                <p class="font-black text-xl mb-2 text-slate-900">${c.hex}</p>
+                                <div class="data-row"><span>RGB</span><span class="data-val">${c.rgb}</span></div>
+                                <div class="data-row"><span>CMYK</span><span class="data-val">${c.cmyk}</span></div>
+                            </div>
+                        </div>`).join('')}
+                </div></div>`).join('');
+
+            // 2. Typo Matrix
+            const tags = ['H1','H2','H3','H4','H5','Body','Small'];
+            const resKeys = Object.keys(finalData.typo);
+            let typoHtml = `<table class="typo-table"><thead><tr><th class="text-left text-slate-300 text-[10px] uppercase border-b pb-4">Tag</th>${resKeys.map(r=>`<th class="text-left text-slate-300 text-[10px] uppercase border-b pb-4">${r}</th>`).join('')}</tr></thead><tbody>`;
+            tags.forEach(t => {
+                typoHtml += `<tr><td class="font-black text-xl pr-10">${t}</td>${resKeys.map(r => {
+                    const d = finalData.typo[r][t] || {};
+                    return `<td><div class="space-y-1">
+                        <p class="font-bold text-lg text-slate-900" style="font-family: ${d.family}">${d.size}</p>
+                        <div class="data-table">
+                            <div class="data-row"><span>WEIGHT</span><span class="data-val">${d.weight}</span></div>
+                            <div class="data-row"><span>LH</span><span class="data-val">${d.lh}</span></div>
+                            <div class="data-row"><span>LS</span><span class="data-val">${d.ls}</span></div>
+                            <div class="data-row"><span>HEX</span><span class="color-blue">${rgbToHex(d.color)}</span></div>
+                        </div>
+                    </div></td>`;
+                }).join('')}</tr>`;
             });
-        };
+            document.getElementById('typoContainer').innerHTML = typoHtml + `</tbody></table>`;
 
-        return {
-            colorSystem: { brand: sortedColors.slice(0,4), functional: sortedColors.slice(4,8), supporting: sortedColors.slice(8,12) },
-            typo,
-            buttonLibrary: uniqueFilter(entryData.mainButtons || []),
-            entryLibrary: uniqueFilter(entryData)
-        };
-    } catch (e) { 
-        if(browser) await browser.close(); 
-        throw e; 
-    }
-}
+            // 3. Button Library
+            document.getElementById('buttonLibrary').innerHTML = finalData.buttonLibrary.map(btn => {
+                const f = btn.functions;
+                return `
+                <div class="spec-card">
+                    <div class="preview-box"><button style="${styleToCss(btn.css)}; position:static;">${btn.text}</button></div>
+                    <div class="data-table">
+                        <div class="data-row"><span>BG</span><span class="color-blue">${rgbToHex(btn.css.backgroundColor)}</span></div>
+                        <div class="data-row"><span>TEXT</span><span class="color-blue">${rgbToHex(btn.css.color)}</span></div>
+                        <div class="data-row"><span>FONT</span><span class="data-val" style="font-size:9px">${btn.css.fontFamily.split(',')[0]}</span></div>
+                        <div class="data-row"><span>PADDING</span><span class="data-val">${btn.metrics.padding}</span></div>
+                        <div class="mt-4 flex gap-2">
+                            ${f.hasHover ? '<span class="px-2 py-0.5 bg-blue-100 text-blue-600 text-[9px] font-bold rounded uppercase">Hover</span>' : ''}
+                            ${f.hasFocus ? '<span class="px-2 py-0.5 bg-purple-100 text-purple-600 text-[9px] font-bold rounded uppercase">Focus</span>' : ''}
+                            ${f.hasDisabled ? '<span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-[9px] font-bold rounded uppercase">Disabled</span>' : ''}
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
 
-module.exports = { extractDesignTokens };
+            // 4. Data Entry Library
+            document.getElementById('entryLibrary').innerHTML = finalData.entryLibrary.map(item => {
+                let preview = '';
+                if (['checkbox', 'radio'].includes(item.type)) {
+                    preview = `<div class="flex items-center gap-2"><input type="${item.type}" style="width:20px;height:20px" checked><span style="font-family:${item.css.fontFamily}">${item.type.toUpperCase()}</span></div>`;
+                } else if (item.tag === 'select') {
+                    preview = `<select style="${styleToCss(item.css)}; width:100%"><option>${item.text || 'Select'}</option></select>`;
+                } else {
+                    preview = `<input value="${item.text}" style="${styleToCss(item.css)}; width:100%">`;
+                }
+                return `
+                <div class="spec-card">
+                    <div class="preview-box">${preview}</div>
+                    <div class="data-table">
+                        <div class="data-row"><span>TYPE</span><span class="data-val uppercase">${item.type}</span></div>
+                        <div class="data-row"><span>RADIUS</span><span class="data-val">${item.css.borderRadius}</span></div>
+                        <div class="data-row"><span>FONT</span><span class="data-val" style="font-size:9px">${item.css.fontFamily.split(',')[0]}</span></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function styleToCss(obj) {
+            return Object.entries(obj).map(([k,v]) => `${k.replace(/[A-Z]/g, m => "-" + m.toLowerCase())}:${v}`).join(';');
+        }
+
+        function downloadJSON() {
+            const blob = new Blob([JSON.stringify(finalData, null, 2)], {type:'application/json'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-spec.json'; a.click();
+        }
+
+        function downloadMD() {
+            let md = "# Design System Specification\n\n## 1. Color System\n";
+            finalData.colorSystem.brand.forEach(c => md += `- Brand: ${c.hex} (${c.rgb})\n`);
+            md += "\n## 2. Typography Details\n";
+            const blob = new Blob([md], {type:'text/markdown'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-guide.md'; a.click();
+        }
+    </script>
+</body>
+</html>
