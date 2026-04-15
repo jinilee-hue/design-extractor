@@ -33,27 +33,13 @@
         <div id="loading" class="hidden py-40 text-center font-bold text-emerald-600 animate-pulse text-xl">실시간 스타일 및 iframe 분석 중...</div>
 
         <div id="result" class="hidden space-y-32">
-            <section id="colorSection">
-                <h2 class="section-title">1. Color Palette</h2>
-                <div id="colorContainer" class="space-y-16"></div>
-            </section>
-
+            <section id="colorSection"><h2 class="section-title">1. Color Palette</h2><div id="colorContainer" class="space-y-16"></div></section>
             <section id="typoSection">
                 <h2 class="section-title">2. Typography Matrix</h2>
-                <div class="bg-white p-12 rounded-[3rem] shadow-sm border overflow-x-auto">
-                    <div id="typoContainer"></div>
-                </div>
+                <div class="bg-white p-12 rounded-[3rem] shadow-sm border overflow-x-auto"><div id="typoContainer"></div></div>
             </section>
-
-            <section id="buttonSection">
-                <h2 class="section-title">3. Button System Library</h2>
-                <div id="buttonLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
-            </section>
-
-            <section id="entrySection">
-                <h2 class="section-title">4. Data Entry Library</h2>
-                <div id="entryLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
-            </section>
+            <section id="buttonSection"><h2 class="section-title">3. Button System Library</h2><div id="buttonLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div></section>
+            <section id="entrySection"><h2 class="section-title">4. Data Entry Library</h2><div id="entryLibrary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div></section>
         </div>
     </div>
 
@@ -70,24 +56,34 @@
             if(!url) return alert('URL 입력!');
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('result').classList.add('hidden');
+            
             try {
-                const res = await fetch('http://localhost:3000/analyze', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                // [중요] Render 서버 주소로 수정됨
+                const res = await fetch('https://design-extractor-icoc.onrender.com/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url })
                 });
+                
                 const json = await res.json();
                 if(json.success) {
                     finalData = json.data;
                     render();
                     document.getElementById('result').classList.remove('hidden');
                     document.getElementById('exportBtns').classList.remove('hidden');
+                } else {
+                    alert('분석 실패: ' + (json.error || '알 수 없는 오류'));
                 }
-            } catch (e) { alert('분석 실패'); }
-            finally { document.getElementById('loading').classList.add('hidden'); }
+            } catch (e) { 
+                console.error(e);
+                alert('서버 연결 실패. 서버가 깨어나는 중일 수 있으니 잠시 후 다시 시도해주세요.'); 
+            } finally { 
+                document.getElementById('loading').classList.add('hidden'); 
+            }
         }
 
         function render() {
-            // [1] Color Palette (기존 사양 유지)
+            // 1. Color Palette
             const groups = ['brand', 'functional', 'supporting'];
             document.getElementById('colorContainer').innerHTML = groups.map(g => `
                 <div><h3 class="text-xs font-black text-slate-400 mb-6 uppercase tracking-widest">${g} Spectrum</h3>
@@ -103,7 +99,7 @@
                         </div>`).join('')}
                 </div></div>`).join('');
 
-            // [2] Typo Matrix (Gutter 및 Letter-Spacing 포함)
+            // 2. Typo Matrix
             const tags = ['H1','H2','H3','H4','H5','Body','Small'];
             const resKeys = Object.keys(finalData.typo);
             let typoHtml = `<table class="typo-table"><thead><tr><th class="text-left text-slate-300 text-[10px] uppercase border-b pb-4">Tag</th>${resKeys.map(r=>`<th class="text-left text-slate-300 text-[10px] uppercase border-b pb-4">${r}</th>`).join('')}</tr></thead><tbody>`;
@@ -123,7 +119,7 @@
             });
             document.getElementById('typoContainer').innerHTML = typoHtml + `</tbody></table>`;
 
-            // [3] Button System (실제 정의된 기능만 배지 표시)
+            // 3. Button Library
             document.getElementById('buttonLibrary').innerHTML = finalData.buttonLibrary.map(btn => {
                 const f = btn.functions;
                 return `
@@ -131,17 +127,19 @@
                     <div class="preview-box"><button style="${styleToCss(btn.css)}; position:static;">${btn.text}</button></div>
                     <div class="data-table">
                         <div class="data-row"><span>BG</span><span class="color-blue">${rgbToHex(btn.css.backgroundColor)}</span></div>
+                        <div class="data-row"><span>TEXT</span><span class="color-blue">${rgbToHex(btn.css.color)}</span></div>
                         <div class="data-row"><span>FONT</span><span class="data-val" style="font-size:9px">${btn.css.fontFamily.split(',')[0]}</span></div>
                         <div class="data-row"><span>PADDING</span><span class="data-val">${btn.metrics.padding}</span></div>
                         <div class="mt-4 flex gap-2">
                             ${f.hasHover ? '<span class="px-2 py-0.5 bg-blue-100 text-blue-600 text-[9px] font-bold rounded uppercase">Hover</span>' : ''}
                             ${f.hasFocus ? '<span class="px-2 py-0.5 bg-purple-100 text-purple-600 text-[9px] font-bold rounded uppercase">Focus</span>' : ''}
+                            ${f.hasDisabled ? '<span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-[9px] font-bold rounded uppercase">Disabled</span>' : ''}
                         </div>
                     </div>
                 </div>`;
             }).join('');
 
-            // [4] Data Entry (iframe 및 모든 타입 자동 분류 렌더링)
+            // 4. Data Entry Library
             document.getElementById('entryLibrary').innerHTML = finalData.entryLibrary.map(item => {
                 let preview = '';
                 if (['checkbox', 'radio'].includes(item.type)) {
@@ -151,7 +149,6 @@
                 } else {
                     preview = `<input value="${item.text}" style="${styleToCss(item.css)}; width:100%">`;
                 }
-
                 return `
                 <div class="spec-card">
                     <div class="preview-box">${preview}</div>
@@ -170,13 +167,13 @@
 
         function downloadJSON() {
             const blob = new Blob([JSON.stringify(finalData, null, 2)], {type:'application/json'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-system.json'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-spec.json'; a.click();
         }
 
         function downloadMD() {
             let md = "# Design System Specification\n\n## 1. Color System\n";
             finalData.colorSystem.brand.forEach(c => md += `- Brand: ${c.hex} (${c.rgb})\n`);
-            md += "\n## 2. Typography Matrix\n(Details in JSON)\n";
+            md += "\n## 2. Typography Details\n";
             const blob = new Blob([md], {type:'text/markdown'});
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'design-guide.md'; a.click();
         }
