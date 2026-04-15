@@ -1,15 +1,17 @@
-# Puppeteer가 설치된 공식 이미지를 사용합니다.
 FROM ghcr.io/puppeteer/puppeteer:21.5.0
 
 USER root
 WORKDIR /app
 
-# 종속성 설치
 COPY package*.json ./
+# Puppeteer 설치 시 브라우저가 같이 설치되도록 함
 RUN npm install
 
-# 소스 코드 복사
 COPY . .
 
-# 서버 실행
+# 실행 권한 부여
+RUN chmod -R 777 /app
+
+EXPOSE 10000
+
 CMD ["node", "server.js"]
