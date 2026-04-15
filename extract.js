@@ -8,8 +8,9 @@ const ENTRY_SELECTOR = 'input, textarea, select, [role="checkbox"], [role="radio
 
 async function analyzePage(page, url) {
     try {
+        // 분석할 페이지로 이동 (최대 60초 대기)
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-        await delay(2000);
+        await delay(2000); // 동적 요소 로드를 위한 추가 대기
 
         const allEntries = [];
         const frames = page.frames();
@@ -99,10 +100,10 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
-    // [Render 최적화] 로그에 찍힌 실제 크롬 설치 경로를 직접 지정합니다.
+    // [중요] Render 배포용 설정
+    // executablePath를 적지 않아야 환경 변수(PUPPETEER_CACHE_DIR)를 읽어 크롬을 찾습니다.
     const browser = await puppeteer.launch({ 
         headless: "new", 
-        // executablePath: '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
