@@ -100,10 +100,10 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
-    // 환경 변수에 설정한 경로(PUPPETEER_EXECUTABLE_PATH)를 우선적으로 사용합니다.
     const browser = await puppeteer.launch({ 
         headless: "new", 
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, 
+        // 환경 변수가 있으면 사용하고, 없으면 Puppeteer가 스스로 찾도록 설정
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
