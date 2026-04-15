@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -103,13 +103,8 @@ async function extractDesignTokens(baseUrl) {
     const browser = await puppeteer.launch({ 
         headless: "new", 
         // 환경 변수가 있으면 사용하고, 없으면 Puppeteer가 스스로 찾도록 설정
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-        ] 
+        executablePath: '/usr/bin/google-chrome', // Render 리눅스 시스템 크롬 경로
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     const page = await browser.newPage();
