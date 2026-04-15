@@ -11,7 +11,6 @@ async function analyzePage(page, url) {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
         await delay(2000);
 
-        // 메인 프레임 및 모든 iframe 포함 분석
         const allEntries = [];
         const frames = page.frames();
 
@@ -20,7 +19,6 @@ async function analyzePage(page, url) {
                 const data = await frame.evaluate((btnSel, entrySel) => {
                     const getStyle = (el) => window.getComputedStyle(el);
                     
-                    // 실제 CSS 선언 여부 확인 (가상 클래스)
                     const getActualFunctions = (el) => {
                         const funcs = { hasHover: false, hasFocus: false, hasChecked: false, hasDisabled: false };
                         try {
@@ -48,7 +46,6 @@ async function analyzePage(page, url) {
                                 const s = getStyle(el);
                                 const rect = el.getBoundingClientRect();
                                 
-                                // 배경색 상속 처리
                                 let actualBg = s.backgroundColor;
                                 let parent = el.parentElement;
                                 while ((actualBg === 'rgba(0, 0, 0, 0)' || actualBg === 'transparent') && parent) {
@@ -79,7 +76,7 @@ async function analyzePage(page, url) {
                                     metrics: {
                                         width: Math.round(rect.width) + 'px',
                                         height: Math.round(rect.height) + 'px',
-                                        padding: `${parseInt(s.paddingTop)}px ${parseInt(s.paddingRight)}px`
+                                        padding: `${parseInt(s.paddingTop)}px ${parseInt(s.paddingRight)}px ${parseInt(s.paddingBottom)}px ${parseInt(s.paddingLeft)}px`
                                     },
                                     functions: getActualFunctions(el)
                                 };
@@ -93,7 +90,6 @@ async function analyzePage(page, url) {
                 }, BUTTON_SELECTOR, ENTRY_SELECTOR);
                 
                 allEntries.push(...data.entries);
-                // 버튼 데이터는 메인 분석에서 중복 제거 후 통합
                 if (frame === page.mainFrame()) allEntries.mainButtons = data.buttons;
             } catch (e) {}
         }
@@ -103,10 +99,20 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
-    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
+    // [Render 배포용 설정] 환경 변수에 설정된 경로를 우선 사용
+    const browser = await puppeteer.launch({ 
+        headless: "new", 
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ] 
+    });
+
     const page = await browser.newPage();
     try {
-        // 1. 컬러 분석 (메인 페이지)
         await page.goto(baseUrl, { waitUntil: 'networkidle2' });
         const colorData = await page.evaluate(() => {
             const res = {};
@@ -119,7 +125,6 @@ async function extractDesignTokens(baseUrl) {
             return res;
         });
 
-        // 2. 타이포 분석 (해상도별)
         const typo = {};
         const viewports = [{n:'1920*1080', w:1920}, {n:'768*1024', w:768}, {n:'360*760', w:360}];
         for(const vp of viewports) {
@@ -138,12 +143,10 @@ async function extractDesignTokens(baseUrl) {
             });
         }
 
-        // 3. 라이브러리 분석 (iframe 포함)
         const entryData = await analyzePage(page, baseUrl);
 
         await browser.close();
 
-        // 데이터 가공 및 중복 제거
         const rgbToHex = (rgb) => {
             const m = rgb.match(/\d+/g);
             return m ? "#" + m.slice(0, 3).map(x => parseInt(x).toString(16).padStart(2, '0')).join('').toUpperCase() : "#FFFFFF";
@@ -159,11 +162,10 @@ async function extractDesignTokens(baseUrl) {
             hex: rgbToHex(c[0]), rgb: c[0], cmyk: rgbToCmyk(c[0])
         }));
 
-        // 중복 제거 필터
         const uniqueFilter = (arr) => {
             const seen = new Set();
             return arr.filter(item => {
-                const sig = `${item.css.backgroundColor}-${item.css.color}-${item.css.fontSize}-${item.css.fontFamily}`;
+                const sig = `${item.type}-${item.css.backgroundColor}-${item.css.color}-${item.css.fontSize}-${item.css.fontFamily}`;
                 if (seen.has(sig)) return false;
                 seen.add(sig);
                 return true;
