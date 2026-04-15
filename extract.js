@@ -8,9 +8,8 @@ const ENTRY_SELECTOR = 'input, textarea, select, [role="checkbox"], [role="radio
 
 async function analyzePage(page, url) {
     try {
-        // 분석할 페이지로 이동 (최대 60초 대기)
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-        await delay(2000); // 동적 요소 로드를 위한 추가 대기
+        await delay(2000);
 
         const allEntries = [];
         const frames = page.frames();
@@ -100,10 +99,11 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
+    // [중요] Render 로그에서 확인된 실제 크롬 설치 경로를 직접 지정
+    // puppeteer-core는 브라우저 자동 탐색 기능이 없으므로 이 경로가 필수입니다.
     const browser = await puppeteer.launch({ 
         headless: "new", 
-        // [수정] 직접 경로 대신 환경 변수에서 읽어오거나 비워둡니다.
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined, 
+        executablePath: '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
@@ -114,7 +114,9 @@ async function extractDesignTokens(baseUrl) {
 
     const page = await browser.newPage();
     try {
-        await page.goto(baseUrl, { waitUntil: 'networkidle2' });
+        await page.goto(baseUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+        
+        // 1. 컬러 추출
         const colorData = await page.evaluate(() => {
             const res = {};
             document.querySelectorAll('*').forEach(el => {
@@ -126,6 +128,7 @@ async function extractDesignTokens(baseUrl) {
             return res;
         });
 
+        // 2. 타이포그래피 추출 (반응형 대응)
         const typo = {};
         const viewports = [{n:'1920*1080', w:1920}, {n:'768*1024', w:768}, {n:'360*760', w:360}];
         for(const vp of viewports) {
@@ -144,10 +147,12 @@ async function extractDesignTokens(baseUrl) {
             });
         }
 
+        // 3. 버튼 및 입력창 구성요소 추출
         const entryData = await analyzePage(page, baseUrl);
 
         await browser.close();
 
+        // 헬퍼 함수: 컬러 변환
         const rgbToHex = (rgb) => {
             const m = rgb.match(/\d+/g);
             return m ? "#" + m.slice(0, 3).map(x => parseInt(x).toString(16).padStart(2, '0')).join('').toUpperCase() : "#FFFFFF";
@@ -179,7 +184,10 @@ async function extractDesignTokens(baseUrl) {
             buttonLibrary: uniqueFilter(entryData.mainButtons || []),
             entryLibrary: uniqueFilter(entryData)
         };
-    } catch (e) { if(browser) await browser.close(); throw e; }
+    } catch (e) { 
+        if(browser) await browser.close(); 
+        throw e; 
+    }
 }
 
 module.exports = { extractDesignTokens };
