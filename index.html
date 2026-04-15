@@ -59,7 +59,7 @@
             
             try {
                 // [중요] Render 서버 주소로 수정됨
-                const res = await fetch('https://design-extractor-icoc.onrender.com/analyze', {
+                const res = await fetch('analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url })
