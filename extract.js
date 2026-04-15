@@ -99,9 +99,10 @@ async function analyzePage(page, url) {
 }
 
 async function extractDesignTokens(baseUrl) {
-    // [중요] Render 환경 최적화: executablePath를 설정하지 않아야 npx로 설치된 브라우저를 자동 탐색합니다.
+    // [Render 최적화] 로그에 찍힌 실제 크롬 설치 경로를 직접 지정합니다.
     const browser = await puppeteer.launch({ 
         headless: "new", 
+        executablePath: '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
